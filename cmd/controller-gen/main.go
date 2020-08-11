@@ -25,6 +25,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"sigs.k8s.io/controller-tools/pkg/crd"
+	"sigs.k8s.io/controller-tools/pkg/crdgo"
 	"sigs.k8s.io/controller-tools/pkg/deepcopy"
 	"sigs.k8s.io/controller-tools/pkg/genall"
 	"sigs.k8s.io/controller-tools/pkg/genall/help"
@@ -49,6 +50,7 @@ var (
 	// and has options for output forms.
 	allGenerators = map[string]genall.Generator{
 		"crd":         crd.Generator{},
+		"crdgo":       crdgo.Generator{},
 		"rbac":        rbac.Generator{},
 		"object":      deepcopy.Generator{},
 		"webhook":     webhook.Generator{},
