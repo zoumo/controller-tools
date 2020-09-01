@@ -2,87 +2,11 @@ package crdgo
 
 import (
 	"encoding/json"
-	"path"
 	"reflect"
-	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/dave/jennifer/jen"
 	"github.com/zoumo/golib/reflection"
 )
-
-var (
-	imports = &importsList{
-		byAlias: make(map[string]string),
-		byPath:  make(map[string]string),
-	}
-)
-
-// importsList keeps track of required imports, automatically assigning aliases
-// to import statement.
-type importsList struct {
-	byPath  map[string]string
-	byAlias map[string]string
-}
-
-// NeedImport marks that the given package is needed in the list of imports,
-// returning the ident (import alias) that should be used to reference the package.
-func (l *importsList) NeedImport(importPath string) string {
-	// we get an actual path from Package, which might include venddored
-	// packages if running on a package in vendor.
-	if ind := strings.LastIndex(importPath, "/vendor/"); ind != -1 {
-		importPath = importPath[ind+8: /* len("/vendor/") */]
-	}
-
-	// check to see if we've already assigned an alias, and just return that.
-	alias, exists := l.byPath[importPath]
-	if exists {
-		return alias
-	}
-
-	// otherwise, calculate an import alias by joining path parts till we get something unique
-	restPath, nextWord := path.Split(importPath)
-
-	for otherPath, exists := "", true; exists && otherPath != importPath; otherPath, exists = l.byAlias[alias] {
-		if restPath == "" {
-			// do something else to disambiguate if we're run out of parts and
-			// still have duplicates, somehow
-			alias += "x"
-		}
-
-		// can't have a first digit, per Go identifier rules, so just skip them
-		for firstRune, runeLen := utf8.DecodeRuneInString(nextWord); unicode.IsDigit(firstRune); firstRune, runeLen = utf8.DecodeRuneInString(nextWord) {
-			nextWord = nextWord[runeLen:]
-		}
-
-		// make a valid identifier by replacing "bad" characters with underscores
-		nextWord = strings.Map(func(r rune) rune {
-			if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
-				return r
-			}
-			return '_'
-		}, nextWord)
-
-		alias = nextWord + alias
-		if len(restPath) > 0 {
-			restPath, nextWord = path.Split(restPath[:len(restPath)-1] /* chop off final slash */)
-		}
-	}
-
-	l.byPath[importPath] = alias
-	l.byAlias[alias] = importPath
-	return alias
-}
-
-func (l *importsList) Qual(pkg, name string) *jen.Statement {
-	l.NeedImport(pkg)
-	return jen.Qual(pkg, name)
-}
-
-func (l *importsList) ImportAlias() map[string]string {
-	return l.byPath
-}
 
 func GenerateValue(i interface{}) *jen.Statement {
 	return generateValue(reflect.ValueOf(i), false)
@@ -161,14 +85,14 @@ func generateType(t reflect.Type) *jen.Statement {
 	case reflect.Map:
 		return jen.Map(generateType(t.Key())).Add(generateType(t.Elem()))
 	case reflect.Struct:
-		return imports.Qual(t.PkgPath(), t.Name())
+		return jen.Qual(t.PkgPath(), t.Name())
 	case reflect.Chan:
 		return jen.Chan().Add(generateType(t.Elem()))
 	case reflect.Func:
 		// skip
 	default:
 		if reflection.IsCustomType(t) {
-			return imports.Qual(t.PkgPath(), t.Name())
+			return jen.Qual(t.PkgPath(), t.Name())
 		}
 		return jen.Id(t.Kind().String())
 	}
@@ -182,7 +106,7 @@ func generatePtrLiteralValue(v reflect.Value) *jen.Statement {
 	}
 	value := generateBuiltinLiteralValue(v)
 	// convert to pointer
-	p := imports.Qual("github.com/zoumo/golib/pointer", Capitalize(t.Kind().String())).Call(value)
+	p := jen.Qual("github.com/zoumo/golib/pointer", Capitalize(t.Kind().String())).Call(value)
 	if reflection.IsCustomType(t) {
 		// convert custom pointer
 		p = jen.Parens(jen.Op("*").Qual(t.PkgPath(), t.Name())).Parens(p)
@@ -198,7 +122,7 @@ func generateLiteralValue(v reflect.Value) *jen.Statement {
 	var ts *jen.Statement
 	ts = generateBuiltinLiteralValue(v)
 	if reflection.IsCustomType(t) {
-		ts = imports.Qual(t.PkgPath(), t.Name()).Parens(ts)
+		ts = jen.Qual(t.PkgPath(), t.Name()).Parens(ts)
 	}
 	return ts
 }
@@ -266,7 +190,7 @@ func generateStructValue(v reflect.Value, ptrResult bool, omitType bool) *jen.St
 			}
 		})
 	} else {
-		ts = imports.Qual(t.PkgPath(), t.Name())
+		ts = jen.Qual(t.PkgPath(), t.Name())
 	}
 
 	if ptrResult {
@@ -299,7 +223,7 @@ func generateStructWithUnexportedField(v reflect.Value, ptrResult bool) *jen.Sta
 	if t.Kind() != reflect.Struct {
 		return nil
 	}
-	structS := imports.Qual(t.PkgPath(), t.Name())
+	structS := jen.Qual(t.PkgPath(), t.Name())
 	ptrT := reflect.PtrTo(t)
 
 	marshaler := reflect.TypeOf((*json.Marshaler)(nil)).Elem()
