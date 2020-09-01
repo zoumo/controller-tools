@@ -20,3 +20,5 @@ require (
 	k8s.io/apimachinery v0.18.2
 	sigs.k8s.io/yaml v1.2.0
 )
+
+replace github.com/dave/jennifer => github.com/zoumo/jennifer v1.4.1-0.20200901083333-7511cf6cea96
