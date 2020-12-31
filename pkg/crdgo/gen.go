@@ -2,6 +2,7 @@ package crdgo
 
 import (
 	"fmt"
+	"go/ast"
 	"strings"
 
 	"github.com/dave/jennifer/jen"
@@ -122,7 +123,7 @@ func (g Generator) Generate(ctx *genall.GenerationContext) error {
 	crdVersions := g.CRDVersions
 
 	if len(crdVersions) == 0 {
-		crdVersions = []string{"v1beta1"}
+		crdVersions = []string{"v1"}
 	}
 
 	cw := &codeWriter{
@@ -188,6 +189,29 @@ func (g Generator) Generate(ctx *genall.GenerationContext) error {
 	return nil
 }
 
+func (Generator) CheckFilter() loader.NodeFilter {
+	return filterTypesForCRDs
+}
+
+// filterTypesForCRDs filters out all nodes that aren't used in CRD generation,
+// like interfaces and struct fields without JSON tag.
+func filterTypesForCRDs(node ast.Node) bool {
+	switch node := node.(type) {
+	case *ast.InterfaceType:
+		// skip interfaces, we never care about references in them
+		return false
+	case *ast.StructType:
+		return true
+	case *ast.Field:
+		_, hasTag := loader.ParseAstTag(node.Tag).Lookup("json")
+		// fields without JSON tags mean we have custom serialization,
+		// so only visit fields with tags.
+		return hasTag
+	default:
+		return true
+	}
+}
+
 type codeWriter struct {
 	packageName string
 	headerText  string
@@ -202,6 +226,7 @@ func (cw *codeWriter) setFileDefault(f *jen.File) {
 
 	f.ImportAlias("k8s.io/apimachinery/pkg/apis/meta/v1", "metav1")
 	f.ImportAlias("k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1", "apiextensionsv1beta1")
+	f.ImportAlias("k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1", "apiextensionsv1")
 }
 
 func (cw *codeWriter) GenerateScheme(metav1Pkg *loader.Package) error {
@@ -211,6 +236,7 @@ func (cw *codeWriter) GenerateScheme(metav1Pkg *loader.Package) error {
 	scheme := jen.Qual("k8s.io/client-go/kubernetes/scheme", "Scheme")
 	schemefile.Func().Id("init").Params().BlockFunc(func(g *jen.Group) {
 		g.Qual("k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1", "AddToScheme").Call(scheme.Clone())
+		g.Qual("k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1", "AddToScheme").Call(scheme.Clone())
 		for pkg := range cw.parser.GroupVersions {
 			if pkg == metav1Pkg {
 				continue
