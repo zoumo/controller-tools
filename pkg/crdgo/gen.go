@@ -267,6 +267,7 @@ func (cw *codeWriter) GenerateCrds(crds map[string][]interface{}) error {
 			values = append(values, GenerateValue(list[i]))
 		}
 		slice := jen.Index().Op("*").Qual("k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/"+version, "CustomResourceDefinition")
+		crdsfile.Comment("//nolint")
 		crdsfile.Func().Id("New" + Capitalize(version) + "CRDs").Params().Add(slice.Clone()).Block(
 			jen.Return(
 				slice.Clone().Values(values...),
